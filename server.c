@@ -13,8 +13,11 @@
 #include "openssl/ssl.h"
 #include "openssl/err.h"
 #include <fcntl.h>
+#include <signal.h>
 #define FAIL    -1
 #define MAXSZ 5000
+SSL_CTX *ctx;
+int server;
 int OpenListener(int port)
 {
     int sd;
@@ -194,10 +197,24 @@ void Servlet(SSL* ssl) /* Serve the connection -- threadable */
    SSL_free(ssl);         /* release SSL state */
    close(sd);          /* close connection */
 }
+void  INThandler(int sig)
+{
+     char  c;
+
+     signal(sig, SIG_IGN);
+     printf("OUCH, did you hit Ctrl-C?\n"
+            "Do you really want to quit? [y/n] ");
+     c = getchar();
+     if (c == 'y' || c == 'Y') {
+        SSL_CTX_free(ctx);         /* release context */
+        close(server);          /* close server socket */
+        exit(0);
+     }
+     else
+          signal(SIGINT, INThandler);
+}
 int main(int count, char *Argc[])
 {
-    SSL_CTX *ctx;
-    int server;
     char *portnum;
 //Only root user have the permsion to run the server
     if(!isRoot())
@@ -210,6 +227,7 @@ int main(int count, char *Argc[])
         printf("Usage: %s <portnum>\n", Argc[0]);
         exit(0);
     }
+    signal(SIGINT, INThandler);
     // Initialize the SSL library
     portnum = Argc[1];
     SSL_library_init();
@@ -228,6 +246,4 @@ int main(int count, char *Argc[])
         SSL_set_fd(ssl, client);      /* set connection socket to SSL state */
         Servlet(ssl);         /* service connection */
    }
-   close(server);          /* close server socket */
-   SSL_CTX_free(ctx);         /* release context */
 }
